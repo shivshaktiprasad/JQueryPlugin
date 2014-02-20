@@ -1,34 +1,59 @@
 ﻿(function ($) {
-    $.validate = function (validateFor) {
+    //$("[validate]").parentsUntil('[validation-option]').each(function () {
+        //var options = JSON.parse($(this).attr('[validation-option]'));
+        //if (options.onchange) {
+    $(document).ready(function () {
+        $("[validate]").focusout(validate);
+    });
+        //}
+    //});
+    $.validate = function (FormGroupSelector) {
         var output = { isValid: true, message: "", results: [] };
-        if (validateFor) {
-            $("[validate-" + validateFor + "]").each(function () {
-                var options = $(this).attr("validate-" + validateFor);
-                if (options) {
-                    options = eval('options={' + options + '}');
-                    $.extend(options, { value: $(this).val() });
-                    var res = Validation.validate(options);
-                    $.extend(res, { control: this });
-                    if (!res.isValid) {
-                        var caption = $(this).attr("caption");
-                        if (caption) {
-                            res.message = caption + " is " + res.message;
-                        }
-                        output.isValid = false;
-                        output.message += "\n" + res.message;
-                        if (options.overlayMessage) {
-                            OverlayMessage(res.control, res.message);
-                        }
-                    }
-                    $(output.results).append(res);
+        if (FormGroupSelector) {
+            $(FormGroupSelector + " [validate]").each(function () {
+                var res = validate({Element:this});
+                if (!res.isValid) {
+                    output.isValid = false;
+                    output.message += "\n" + res.message;
                 }
+                $(output.results).append(res);
             });
         }
         return output;
     };
 }(jQuery));
-function OverlayMessage(control, message) {
-    $(control).after($(document.createElement("div")).attr("id", "abcd").css({ "background-color": "red", "position": "relative", "height": $(control).height(), "width": $(control).width() }));
+function OverlayMessage(control, isValid, message) {
+    if (isValid) {
+        $(control).prop("borderRestore", control.style.borderColor).css({ "border-color": "" });
+    } else {
+        $(control).prop("borderRestore", control.style.borderColor).css({ "border-color": "red" });
+    }
+}
+
+function validate(opts) {
+    var Element = 'object' === typeof opts ? opts.Element ? opts.Element : this : this ;
+    var options = $(Element).attr("validate");
+    if (options) {
+        options = eval('options={' + options + '}');
+        $.extend(options, { value: $(Element).val() });
+        var res = Validation.validate(options);
+        $.extend(res, { control: Element });
+        if (!res.isValid) {
+            var caption = $(Element).attr("caption");
+            if (caption) {
+                res.message = caption + " is " + res.message;
+            }
+            //if (options.overlay || (opts && opts.overlay) ) {
+                OverlayMessage(res.control, res.isValid, res.message);
+            //}
+                if ("object" === typeof opts) {
+                    if ('function' === typeof opts.call) {
+                        opts.call.apply(res);
+                    }
+                }
+        }
+        return res;
+    }
 }
 
 Validation = {
