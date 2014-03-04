@@ -22,11 +22,21 @@
         return output;
     };
 }(jQuery));
-function OverlayMessage(result) {
+function OverlayMessage(result, options) {
     if (result.isValid) {
-        $(result.control).prop("borderRestore", result.control.style.borderColor).css({ "border-color": "" });
+        //$("#_overlay").css({ "top": $("#txtProductCode").offset().top, "left": $("#txtProductCode").offset().left, "height": $("#txtProductCode").height(), "width": $("#txtProductCode").width() })
+        $(result.control).css({ "border-color": "" });
+        $(result.control).tooltip({ disabled: true });
+
     } else {
-        $(result.control).prop("borderRestore", result.control.style.borderColor).css({ "border-color": "red" });
+        //var rect = result.control.getBoundingClientRect();
+        //var height = $(result.control).height();
+        //var width = $(result.control).width();
+        $(result.control).css({ "border-color": "red" });
+        $(result.control).tooltip({ content: result.message });
+        //$(result.control).attr("title", result.message)
+        //$(result.control).tooltip();
+
     }
 }
 
@@ -35,7 +45,8 @@ function validate(opts) {
     var options = $(Element).attr("validate");
     if (options) {
         options = eval('options={' + options + '}');
-        $.extend(options, { value: $(Element).val(), caption: $(Element).val()});
+        $.extend(options, { value: $(Element).val() });
+        if ($(Element).attr('caption')) { $.extend(options, { caption: $(Element).attr('caption') }); }
         var res = Validation.validate(options);
         $.extend(res, { control: Element });
         OverlayMessage(res);
@@ -69,11 +80,11 @@ Validation = {
         //validate for mandatory
         if (options.required) {
             if (options.value == undefined)
-                return new this.ValidationResult(false, "required");
+                return new this.ValidationResult(false, options.caption + " is required");
             if ('object' == typeof options.value)
-                return new this.ValidationResult(false, "required");
+                return new this.ValidationResult(false, options.caption + " is required");
             if ('string' == typeof options.value && options.value == "")
-                return new this.ValidationResult(false, "required");
+                return new this.ValidationResult(false, options.caption + " is required");
         }else{
             if (options.value == undefined)
                 isEmpty = true;
@@ -86,14 +97,14 @@ Validation = {
         //validate for minimum length of string
         if (options.minLength) {
             if (options.value.length < options.minLength) {
-                return new this.ValidationResult(false, "less than minimum length");
+                return new this.ValidationResult(false, options.caption + " is less than minimum length of " + options.minLength + "characters");
             }
         }
 
         //validate for maximum length of string
         if (options.maxLength) {
             if (options.value.length > options.maxLength) {
-                return new this.ValidationResult(false, "greater than maximum length");
+                return new this.ValidationResult(false, options.caption + " is greater than maximum length of " + options.maxLength + "characters");
             }
         }
 
@@ -170,6 +181,14 @@ Validation = {
 
         //validate for number
         if (type.value === 'number') {
+            var val = options.value;
+            if (type.allowContent) {
+                for (var i = 0; i < type.allowContent.length; i++) {
+                    while (val.contains(type.allowContent[i])) {
+                        val = val.replace(type.allowContent[i], "");
+                    }
+                }
+            }
             if (isNaN(parseFloat(options.value)) && !isFinite(options.value)) {
                 return new this.ValidationResult(false, type.errMessage ? type.errMessage : options.caption + " is not a number");
             }
