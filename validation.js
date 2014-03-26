@@ -7,20 +7,57 @@
     });
         //}
     //});
-    $.validate = function (FormGroupSelector) {
+    $.fn.validate = function () {
         var output = { isValid: true, message: "", results: [] };
-        if (FormGroupSelector) {
-            $(FormGroupSelector + " [validate]").each(function () {
-                var res = validate({Element:this});
+        this.each(function () {
+            $(this).find("[validate]").each(function () {
+                var res = $(this).data('ValidationResult');
+                if (!res) {
+                    res = validate({ Element: this });
+                }
                 if (!res.isValid) {
                     output.isValid = false;
                     output.message += "\n" + res.message;
                 }
                 $(output.results).append(res);
             });
-        }
+        });
         return output;
     };
+    $.fn.validation = function (options) {
+        if (options) {
+            this.each(function () {
+                var validationOption = $(this).data("ValidationOption");
+                validationOption = validationOption ? validationOption : {};
+                $.extend(validationOption, options);
+                $(this).data("ValidationOption", validationOption);
+            });
+            return this;
+        }else{
+            return $(this).data("ValidationOption");
+        }
+    };
+
+    $.fn.clearValidationResult = function () {
+        this.each(function () {
+            $(this).find('[validate]').each(function () {
+                $(this).removeData("ValidationResult");
+                OverlayMessage({ isValid: true, control:this });
+            });
+        });
+    }
+    //$.SetStatus = function (selector, value) {
+    //    var res = value ?
+    //                typeof value.isValid !== "undefined" ?
+    //                    typeof value.message !== 'undefined' ?
+    //                        { isValid: value.isValid, message: value.message }
+    //                        : { isValid: value.isValid, message: '' }
+    //                    : undefined
+    //                : undefined;
+    //    if (res) {
+    //        $(selector).data(('ValidationResult', res));
+    //    }
+    //};
 }(jQuery));
 function OverlayMessage(result, options) {
     if (result.isValid) {
@@ -28,7 +65,7 @@ function OverlayMessage(result, options) {
         $(result.control).css({ "border-color": "" });
         $(result.control).tooltip({ disabled: true });
 
-    } else {
+    } else if (result.isValid == false) {
         //var rect = result.control.getBoundingClientRect();
         //var height = $(result.control).height();
         //var width = $(result.control).width();
@@ -36,7 +73,8 @@ function OverlayMessage(result, options) {
         $(result.control).tooltip({ content: result.message });
         //$(result.control).attr("title", result.message)
         //$(result.control).tooltip();
-
+    } else {
+        $(result.control).css({ "border-color": "green" });
     }
 }
 
@@ -46,8 +84,14 @@ function validate(opts) {
     if (options) {
         options = eval('options={' + options + '}');
         $.extend(options, { value: $(Element).val() });
+        $.extend(options, { Element: Element });
+        var validationOption = $(Element).data("ValidationOption");
+        if (validationOption) {
+            $.extend(options, validationOption);
+        }
         if ($(Element).attr('caption')) { $.extend(options, { caption: $(Element).attr('caption') }); }
         var res = Validation.validate(options);
+        $(Element).data('ValidationResult', res)
         $.extend(res, { control: Element });
         OverlayMessage(res);
         return res;
@@ -77,6 +121,47 @@ Validation = {
     },
     validate: function (options) {
         var isEmpty = false;
+        if (options.url) {
+            if (options.value !== '') {
+                var url = {};
+                if ("object" == typeof options.url) {
+                    url.url = options.url.url;
+                    url.errMessage = options.url.errMessage ? options.url.errMessage : options.errMessage ? options.errMessage : "the value provided in " + options.caption + " cannot be accepted.";
+                }
+                else {
+                    url.url = options.url;
+                    url.errMessage = "the value provided in " + options.caption + " cannot be accepted.";
+                }
+                var res = { isValid: false, message: 'processing..', control: options.Element };
+                $.ajax({
+                    type: "post",
+                    contentType: "application/json; charset=utf-8",
+                    url: url.url,
+                    data: JSON.stringify({ value: options.value }),
+                    dataType: "json",
+                    async: true,
+                    success: function (data, textStatus) {
+                        var ret = JSON.parse(data.d);
+                        if (typeof ret !== 'undefined' && ret === false) {
+                            res.isValid = ret;
+                            res.message = url.errMessage;
+                            $(options.Element).data("ValidationResult", res);
+                            OverlayMessage(res, options);
+                        }
+                    },
+                    error: function () {
+                        var res = { isValid: false, message: 'could not validate ' + options.caption + ' due to network error.' };
+                        $(options.Element).data("ValidationResult", res);
+                        OverlayMessage(res, options);
+                    },
+                    beforeSend: function () {
+                        $(options.Element).data("ValidationResult", res);
+                        OverlayMessage(res, options);
+                    }
+                });
+            }
+        }
+
         //validate for mandatory
         if (options.required) {
             if (options.value == undefined)
@@ -155,12 +240,12 @@ Validation = {
                 type.allowContent = options.type.allowContent ? options.type.allowContent : null;
                 if (options.type.notAllowContent) {
                     if ('string' === typeof options.type.notAllowContent) {
-                        if (options.value.contains(options.type.notAllowContent)) {
+                        if (options.value.indexOf(options.type.notAllowContent) > -1) {
                             return new this.ValidationResult(false, type.errMessage ? type.errMessage : options.caption + "some characters of " + options.caption + "are not allowd");
                         }
                     }else if ('object' === typeof options.type.notAllowContent) {
                         for (var i = 0; i < options.type.notAllowContent.length; i++) {
-                            if (options.value.contains(options.type.notAllowContent[i])) {
+                            if (options.value.indexOf(options.type.notAllowContent[i]) > -1) {
                                 return new this.ValidationResult(false, type.errMessage ? type.errMessage : options.caption + "some characters of " + options.caption + "are not allowd");
                             }
                         }
@@ -184,7 +269,7 @@ Validation = {
             var val = options.value;
             if (type.allowContent) {
                 for (var i = 0; i < type.allowContent.length; i++) {
-                    while (val.contains(type.allowContent[i])) {
+                    while (val.indexOf(type.allowContent[i]) > -1) {
                         val = val.replace(type.allowContent[i], "");
                     }
                 }
@@ -206,7 +291,7 @@ Validation = {
             var val = options.value;
             if (type.allowContent) {
                 for (var i = 0; i < type.allowContent.length; i++) {
-                    while (val.contains(type.allowContent[i])) {
+                    while (val.indexOf(type.allowContent[i]) > -1) {
                         val = val.replace(type.allowContent[i], "");
                     }
                 }
